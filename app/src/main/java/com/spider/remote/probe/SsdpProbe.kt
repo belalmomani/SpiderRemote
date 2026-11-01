@@ -14,14 +14,14 @@ data class SsdpReply(val from: String, val text: String)
  * لا يرسل أي أمر تحكم لأي جهاز.
  */
 object SsdpProbe {
-    suspend fun search(listenMs: Int = 3000): List<SsdpReply> = withContext(Dispatchers.IO) {
+    suspend fun search(listenMs: Int = 3000, st: String = "ssdp:all"): List<SsdpReply> = withContext(Dispatchers.IO) {
         val out = mutableListOf<SsdpReply>()
         try {
             DatagramSocket().use { s ->
                 s.soTimeout = 500
                 val msg = ("M-SEARCH * HTTP/1.1\r\n" +
                     "HOST: 239.255.255.250:1900\r\n" +
-                    "MAN: \"ssdp:discover\"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n").toByteArray()
+                    "MAN: \"ssdp:discover\"\r\nMX: 2\r\nST: $st\r\n\r\n").toByteArray()
                 s.send(DatagramPacket(msg, msg.size, InetAddress.getByName("239.255.255.250"), 1900))
                 val end = System.currentTimeMillis() + listenMs
                 val buf = ByteArray(2048)
