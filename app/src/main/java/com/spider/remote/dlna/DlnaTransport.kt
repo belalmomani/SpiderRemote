@@ -38,15 +38,24 @@ class DlnaTransport(private val r: Renderer) : RemoteTransport {
         return Dlna.soap(u, t, "SetVolume", listOf(inst, master, "DesiredVolume" to "$n")).map { }
     }
 
+    private var lastVolume = 0
+
+    /** يجرّب SetMute أولاً؛ إن رفضه الجهاز يلجأ لخفض الصوت إلى 0 ثم استرجاع آخر قيمة. */
     private suspend fun toggleMute(): Result<Unit> {
         val (u, t) = target() ?: return Result.failure(IllegalStateException("لا توجد خدمة RenderingControl"))
-        val cur = getMute().getOrElse { return Result.failure(it) }
-        return Dlna.soap(u, t, "SetMute", listOf(inst, master, "DesiredMute" to if (cur) "0" else "1")).map { }
+        val muted = getMute()
+        if (muted.isSuccess) {
+            val r = Dlna.soap(u, t, "SetMute", listOf(inst, master, "DesiredMute" to if (muted.getOrThrow()) "0" else "1")).map { }
+            if (r.isSuccess) return r
+        }
+        val vol = getVolume().getOrElse { return Result.failure(it) }
+        val newVol = if (vol > 0) { lastVolume = vol; 0 } else lastVolume.coerceAtLeast(1)
+        return Dlna.soap(u, t, "SetVolume", listOf(inst, master, "DesiredVolume" to "$newVol")).map { }
     }
 
     override suspend fun send(key: RemoteKey): Result<Unit> = when (key) {
-        RemoteKey.VOL_UP -> step(+5)
-        RemoteKey.VOL_DOWN -> step(-5)
+        RemoteKey.VOL_UP -> step(+1)
+        RemoteKey.VOL_DOWN -> step(-1)
         RemoteKey.MUTE -> toggleMute()
         else -> Result.failure(IllegalStateException("الزر غير مدعوم: الجهاز لا يعرض هذا الأمر عبر الشبكة"))
     }
