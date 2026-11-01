@@ -12,7 +12,9 @@ data class Renderer(
     val ip: String,
     val location: String,
     val renderingType: String?,
-    val renderingUrl: String?
+    val renderingUrl: String?,
+    val avType: String? = null,
+    val avUrl: String? = null
 )
 
 /** DLNA/UPnP قياسي: اكتشاف أجهزة العرض ثم إرسال طلبات SOAP موثقة في ملفات الوصف. */
@@ -60,6 +62,8 @@ object Dlna {
             val base = tag(xml, "URLBase") ?: (origin(location) + "/")
             var rType: String? = null
             var rUrl: String? = null
+            var aType: String? = null
+            var aUrl: String? = null
             Regex("<service>(.*?)</service>", RegexOption.DOT_MATCHES_ALL).findAll(xml).forEach { m ->
                 val block = m.groupValues[1]
                 val type = tag(block, "serviceType")
@@ -67,9 +71,12 @@ object Dlna {
                 if (type != null && ctrl != null && type.contains("RenderingControl")) {
                     rType = type
                     rUrl = resolve(base, location, ctrl)
+                } else if (type != null && ctrl != null && type.contains("AVTransport")) {
+                    aType = type
+                    aUrl = resolve(base, location, ctrl)
                 }
             }
-            Renderer(tag(xml, "friendlyName") ?: ip, ip, location, rType, rUrl)
+            Renderer(tag(xml, "friendlyName") ?: ip, ip, location, rType, rUrl, aType, aUrl)
         } catch (e: Exception) {
             null
         }

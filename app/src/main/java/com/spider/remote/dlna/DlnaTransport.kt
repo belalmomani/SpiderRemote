@@ -32,6 +32,27 @@ class DlnaTransport(private val r: Renderer) : RemoteTransport {
         }
     }
 
+    private fun av(): Pair<String, String>? {
+        val u = r.avUrl
+        val t = r.avType
+        return if (u != null && t != null) u to t else null
+    }
+
+    /** Play / Pause / Stop على الوسائط المبثوثة إلى الجهاز فقط (ليست قنوات الرسيفر). */
+    suspend fun avAction(action: String): Result<Unit> {
+        val (u, t) = av() ?: return Result.failure(IllegalStateException("لا توجد خدمة AVTransport"))
+        val args = if (action == "Play") listOf(inst, "Speed" to "1") else listOf(inst)
+        return Dlna.soap(u, t, action, args).map { Unit }
+    }
+
+    suspend fun transportState(): Result<String> {
+        val (u, t) = av() ?: return Result.failure(IllegalStateException("لا توجد خدمة AVTransport"))
+        return Dlna.soap(u, t, "GetTransportInfo", listOf(inst)).mapCatching {
+            Regex("<CurrentTransportState>\\s*(\\w+)\\s*</CurrentTransportState>").find(it)?.groupValues?.get(1)
+                ?: throw IllegalStateException("رد غير متوقع: ${it.take(150)}")
+        }
+    }
+
     override suspend fun send(key: RemoteKey): Result<Unit> = when (key) {
         RemoteKey.VOL_UP -> setLevel(level + 1)
         RemoteKey.VOL_DOWN -> setLevel(level - 1)

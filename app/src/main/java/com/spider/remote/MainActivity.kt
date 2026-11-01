@@ -103,6 +103,22 @@ fun AppScreen() {
             Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
                 run("كتم") { act(t.send(RemoteKey.MUTE)) }
             }) { Text("كتم / إلغاء الكتم (بخفض الصوت إلى 0)") }
+            HorizontalDivider()
+            Text("تشغيل الوسائط (تعمل فقط على ما يُبث إلى الجهاز عبر DLNA، لا على قنوات الرسيفر)")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
+                    run("تشغيل") { t.avAction("Play").msg() }
+                }) { Text("تشغيل") }
+                Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
+                    run("إيقاف مؤقت") { t.avAction("Pause").msg() }
+                }) { Text("إيقاف مؤقت") }
+                Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
+                    run("إيقاف") { t.avAction("Stop").msg() }
+                }) { Text("إيقاف") }
+            }
+            OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
+                run("حالة التشغيل") { t.transportState().fold({ it }, { "فشل: ${it.message}" }) }
+            }) { Text("قراءة حالة التشغيل (قراءة فقط)") }
         }
         log.forEach { Text(it) }
 
