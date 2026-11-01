@@ -94,7 +94,13 @@ object Dlna {
                     mapOf("Content-Type" to "text/xml; charset=\"utf-8\"", "SOAPACTION" to "\"$type#$action\"")
                 )
                 if (code in 200..299) Result.success(text)
-                else Result.failure(Exception("HTTP $code: ${text.take(200)}"))
+                else {
+                    val ec = Regex("<errorCode>(.*?)</errorCode>").find(text)?.groupValues?.get(1)
+                    val ed = Regex("<errorDescription>(.*?)</errorDescription>").find(text)?.groupValues?.get(1)
+                    val detail = if (ec != null) "UPnP خطأ $ec ${ed ?: ""}"
+                    else text.replace(Regex("\\s+"), " ").takeLast(300)
+                    Result.failure(Exception("HTTP $code — $detail"))
+                }
             } catch (e: Exception) {
                 Result.failure(e)
             }
