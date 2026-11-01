@@ -54,12 +54,6 @@ fun AppScreen() {
         }
     }
 
-    suspend fun status(t: DlnaTransport): String {
-        val v = t.getVolume().fold({ "$it" }, { "؟ (${it.message})" })
-        val m = t.getMute().fold({ if (it) "مكتوم" else "غير مكتوم" }, { "؟ (${it.message})" })
-        return "الصوت: $v — $m"
-    }
-
     Column(
         Modifier.fillMaxSize().statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -85,21 +79,30 @@ fun AppScreen() {
         val sel = selected
         if (sel != null) {
             val t = remember(sel) { DlnaTransport(sel) }
-            Text("المحدد: ${sel.name} (${sel.ip})", style = MaterialTheme.typography.titleMedium)
-            Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = { run("الحالة") { status(t) } }) {
-                Text("قراءة الصوت والكتم (قراءة فقط)")
+            var shown by remember(sel) { mutableStateOf(t.level) }
+            var sliderV by remember(sel) { mutableStateOf(t.level.toFloat()) }
+            suspend fun act(res: Result<Unit>): String {
+                shown = t.level
+                sliderV = t.level.toFloat()
+                return res.msg() + " — المستوى المرسل: ${t.level}"
             }
+            Text("المحدد: ${sel.name} (${sel.ip})", style = MaterialTheme.typography.titleMedium)
+            Text("مستوى الصوت (يتتبعه التطبيق لأن الجهاز لا يعيد قيمته الحقيقية): $shown")
+            Slider(value = sliderV, onValueChange = { sliderV = it }, valueRange = 0f..100f)
+            Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
+                run("ضبط الصوت") { act(t.setLevel(sliderV.toInt())) }
+            }) { Text("تطبيق المستوى ${sliderV.toInt()}") }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
-                    run("خفض الصوت") { t.send(RemoteKey.VOL_DOWN).msg() + " — " + status(t) }
+                    run("خفض") { act(t.send(RemoteKey.VOL_DOWN)) }
                 }) { Text("صوت −") }
                 Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
-                    run("رفع الصوت") { t.send(RemoteKey.VOL_UP).msg() + " — " + status(t) }
+                    run("رفع") { act(t.send(RemoteKey.VOL_UP)) }
                 }) { Text("صوت +") }
             }
             Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
-                run("كتم") { t.send(RemoteKey.MUTE).msg() + " — " + status(t) }
-            }) { Text("كتم / إلغاء الكتم") }
+                run("كتم") { act(t.send(RemoteKey.MUTE)) }
+            }) { Text("كتم / إلغاء الكتم (بخفض الصوت إلى 0)") }
         }
         log.forEach { Text(it) }
 
