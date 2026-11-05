@@ -1,0 +1,19 @@
+description.xml للجهاز 192.168.8.52 (منقول من لقطة شاشة Chrome)
+
+deviceType:        urn:schemas-upnp-org:device:MediaRenderer:1
+friendlyName:      FOREVER_5_EXTRA
+manufacturer:      lucky            manufacturerURL: http://www.xxxxx.com   (قيمة نائبة)
+modelDescription:  GX Media Renderer
+modelName:         HappyLucky       modelURL: http://www.xxxxx.com           (قيمة نائبة)
+X_DLNADOC:         DMR-1.50
+UDN:               uuid:70520A92-EC01-5590-7052-0A92EC015590
+presentationURL:   /     <-- لم يُفحص بعد
+URLBase:           http://192.168.8.52:49154/
+
+الخدمات (ControlURL تبدأ بـ "_urn:..." نسبية إلى URLBase):
+- AVTransport:1        SCPD /dlna-vir/dmr/AVTransport_scpd.xml
+- ConnectionManager:1  SCPD /dlna-vir/dmr/ConnectionManager_scpd.xml   (لم يُقرأ)
+- RenderingControl:1   SCPD /dlna-vir/dmr/RenderingControl_scpd.xml
+
+ملاحظة: القيم النائبة (xxxxx.com, lucky, HappyLucky) توحي بأن وحدة DLNA هي نموذج SDK افتراضي
+من مورّد الشريحة وليست خدمة مخصصة لشركة Spider. هذا استنتاج لم يُثبت.

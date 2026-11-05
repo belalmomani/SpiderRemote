@@ -1,0 +1,15 @@
+قوائم الأوامر من ملفي SCPD اللذين أرسلهما المستخدم (192.168.8.52). كلها أسماء قياسية بلا أي بادئة X_ أو أمر خاص.
+
+AVTransport (14 أمراً):
+GetCurrentTransportActions, GetDeviceCapabilities, GetMediaInfo, GetPositionInfo,
+GetTransportInfo, GetTransportSettings, Next, Pause, Play, Previous, Seek,
+SetAVTransportURI, SetPlayMode, Stop
+
+RenderingControl (35 أمراً):
+Get/Set: BlueVideoBlackLevel, BlueVideoGain, Brightness, ColorTemperature, Contrast,
+GreenVideoBlackLevel, GreenVideoGain, HorizontalKeystone, Loudness, Mute, RedVideoBlackLevel,
+RedVideoGain, Sharpness, VerticalKeystone, Volume, VolumeDB  (+ GetVolumeDBRange)
+ListPresets, SelectPreset
+
+ConnectionManager: ملف SCPD لم يُجلب ولم يُفحص.
+الإعلان عن أمر في SCPD لا يعني تنفيذه (انظر GetMute/SetMute أدناه).

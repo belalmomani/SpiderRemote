@@ -1,0 +1,17 @@
+تدقيق مشروع Spider Remote 0.4.0 (من الملفات الفعلية، دون تعديل)
+
+الملفات: MainActivity.kt, core/{ReceiverProfile,RemoteKey,RemoteTransport}.kt,
+data/SettingsStore.kt, dlna/{Dlna,DlnaTransport}.kt, probe/{SsdpProbe,TcpProbe}.kt,
+stream/FileServer.kt, AndroidManifest.xml, build.gradle.kts, .github/workflows/build.yml
+
+كل الطلبات الشبكية التي يرسلها التطبيق:
+1) UDP متعدد البث: M-SEARCH إلى 239.255.255.250:1900 (ST: ssdp:all) ثم استماع 3-3.5 ثانية.
+2) HTTP GET لملف description.xml عند عنوان LOCATION المُعلن (للأجهزة الخاصة محلياً فقط).
+3) HTTP POST (SOAP) إلى ControlURL المستخرج من ملف الوصف:
+   - RenderingControl: SetVolume (InstanceID=0, Channel=Master, DesiredVolume=0..100)
+   - AVTransport: Play (Speed=1), Pause, Stop, GetTransportInfo, SetAVTransportURI (تجريبي)
+4) TCP connect فقط (بلا إرسال بيانات) إلى منافذ يدخلها المستخدم (افتراضي: 80, 8080, 23, 554).
+5) خادم HTTP محلي على الهاتف لبث ملف واحد (يقبل عنوان الرسيفر فقط).
+
+لا يرسل التطبيق: GetMute/SetMute/GetVolume (أُزيلت بعد نتائج 401 و0).
+ملاحظة: التطبيق لا يحفظ سجلات الاستجابة في ملف؛ يعرضها على الشاشة فقط.
