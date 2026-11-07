@@ -1,16 +1,23 @@
 package com.spider.remote
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.spider.remote.core.ProfileRegistry
@@ -21,6 +28,7 @@ import com.spider.remote.dlna.DlnaTransport
 import com.spider.remote.dlna.Renderer
 import com.spider.remote.probe.SsdpProbe
 import com.spider.remote.probe.TcpProbe
+import com.spider.remote.stream.FileServer
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -28,7 +36,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                MaterialTheme { Surface(Modifier.fillMaxSize()) { AppScreen() } }
+                MaterialTheme { Surface(Modifier.fillMaxSize()) { RootScreen() } }
             }
         }
     }
@@ -36,94 +44,177 @@ class MainActivity : ComponentActivity() {
 
 private fun Result<Unit>.msg() = fold({ "تم" }, { "فشل: ${it.message}" })
 
+/** الجذر: يختار بين الشاشة المبسطة للمستخدم وشاشة الأدوات المتقدمة، دون خلطهما. */
 @Composable
-fun AppScreen() {
+fun RootScreen() {
+    var advanced by remember { mutableStateOf(false) }
+    if (advanced) {
+        AdvancedScreen(onBack = { advanced = false })
+    } else {
+        UserScreen(onOpenAdvanced = { advanced = true })
+    }
+}
+
+/** الشاشة التي يراها المستخدم: اكتشاف تلقائي ثم أزرار الجهاز المدعومة فقط. */
+@Composable
+fun UserScreen(onOpenAdvanced: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
     var busy by remember { mutableStateOf(false) }
     var renderers by remember { mutableStateOf(listOf<Renderer>()) }
     var selected by remember { mutableStateOf<Renderer?>(null) }
-    var log by remember { mutableStateOf(listOf<String>()) }
-    val profile = ProfileRegistry.all.first()
+    var statusMsg by remember { mutableStateOf("") }
+    var searched by remember { mutableStateOf(false) }
+    var server by remember { mutableStateOf<FileServer?>(null) }
 
-    fun run(label: String, block: suspend () -> String) {
+    fun search() {
         scope.launch {
-            busy = true
-            log = listOf("$label ...")
-            log = listOf("$label: " + block())
+            busy = true; searched = true; statusMsg = "جارٍ البحث عن جهازك..."
+            renderers = Dlna.discover()
+            if (renderers.size == 1) selected = renderers.first()
+            statusMsg = if (renderers.isEmpty()) "لم يُعثر على جهاز. تأكد أن الرسيفر والهاتف على نفس شبكة Wi-Fi." else ""
             busy = false
         }
     }
 
-    Column(
-        Modifier.fillMaxSize().statusBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text("Spider Remote", style = MaterialTheme.typography.headlineSmall)
-        Text("الموديل المرجعي: ${profile.displayName}")
-        Text("المتاح فعلياً عبر Wi-Fi لهذا الموديل: الصوت والكتم (DLNA). أزرار MENU وOK والقنوات غير معروضة من الجهاز.")
-        HorizontalDivider()
+    LaunchedEffect(Unit) { search() }
 
-        Button(enabled = !busy, onClick = {
-            run("البحث") {
-                renderers = Dlna.discover()
-                if (renderers.isEmpty()) "لم يُعثر على أجهزة عرض" else "عُثر على ${renderers.size} جهاز"
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Spider Remote") },
+                actions = {
+                    IconButton(onClick = onOpenAdvanced) {
+                        Icon(Icons.Filled.Settings, contentDescription = "خيارات متقدمة")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            if (renderers.size > 1 || (searched && selected == null)) {
+                Text("اختر جهازك", style = MaterialTheme.typography.titleMedium)
+                renderers.forEach { r ->
+                    OutlinedButton(onClick = { selected = r }, modifier = Modifier.fillMaxWidth()) {
+                        Text(r.name)
+                    }
+                }
             }
-        }) { Text("ابحث عن أجهزة العرض (DLNA)") }
 
-        renderers.forEach { r ->
-            OutlinedButton(onClick = { selected = r; log = listOf("تم اختيار ${r.name}") }, modifier = Modifier.fillMaxWidth()) {
-                Text("${r.name} — ${r.ip}")
+            val sel = selected
+            if (sel == null) {
+                if (statusMsg.isNotBlank()) Text(statusMsg)
+                Button(enabled = !busy, onClick = { search() }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (busy) "جارٍ البحث..." else "ابحث عن جهازي")
+                }
+            } else {
+                val t = remember(sel) { DlnaTransport(sel) }
+                var level by remember(sel) { mutableStateOf(t.level.toFloat()) }
+                var resultLine by remember(sel) { mutableStateOf("") }
+                val hasVolume = sel.renderingUrl != null
+                val hasTransport = sel.avUrl != null
+
+                Text(sel.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("الموديل المرجعي: ${ProfileRegistry.all.first().displayName}", style = MaterialTheme.typography.bodySmall)
+
+                if (!hasVolume && !hasTransport) {
+                    Text("هذا الجهاز لا يعرض أي وظيفة تحكم مدعومة حالياً.")
+                }
+
+                if (hasVolume) {
+                    ElevatedCard {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("الصوت", style = MaterialTheme.typography.titleMedium)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                IconButtonVol("−") {
+                                    scope.launch { resultLine = t.send(RemoteKey.VOL_DOWN).msg(); level = t.level.toFloat() }
+                                }
+                                Slider(
+                                    value = level, onValueChange = { level = it },
+                                    onValueChangeFinished = { scope.launch { resultLine = t.setLevel(level.toInt()).msg() } },
+                                    valueRange = 0f..100f, modifier = Modifier.weight(1f)
+                                )
+                                IconButtonVol("+") {
+                                    scope.launch { resultLine = t.send(RemoteKey.VOL_UP).msg(); level = t.level.toFloat() }
+                                }
+                            }
+                            OutlinedButton(onClick = {
+                                scope.launch { resultLine = t.send(RemoteKey.MUTE).msg(); level = t.level.toFloat() }
+                            }, modifier = Modifier.fillMaxWidth()) { Text("كتم / إلغاء الكتم") }
+                        }
+                    }
+                }
+
+                if (hasTransport) {
+                    ElevatedCard {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("تشغيل الوسائط", style = MaterialTheme.typography.titleMedium)
+                            Text("يعمل فقط على ما يُبث إلى الجهاز، لا على قنوات الرسيفر.", style = MaterialTheme.typography.bodySmall)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(modifier = Modifier.weight(1f), onClick = {
+                                    scope.launch { resultLine = t.avAction("Play").msg() }
+                                }) { Text("تشغيل") }
+                                Button(modifier = Modifier.weight(1f), onClick = {
+                                    scope.launch { resultLine = t.avAction("Pause").msg() }
+                                }) { Text("إيقاف مؤقت") }
+                                Button(modifier = Modifier.weight(1f), onClick = {
+                                    scope.launch { resultLine = t.avAction("Stop").msg() }
+                                }) { Text("إيقاف") }
+                            }
+                            val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+                                if (uri != null) {
+                                    val bind = FileServer.localAddressFor(sel.ip)
+                                    if (bind == null) { resultLine = "تعذّر تحديد عنوان الهاتف على نفس شبكة الرسيفر"; return@rememberLauncherForActivityResult }
+                                    server?.stop()
+                                    val fs = FileServer(ctx, uri, sel.ip, bind)
+                                    val url = fs.start()
+                                    server = fs
+                                    scope.launch { resultLine = t.playUri(url, fs.mime, "Spider Remote").msg() }
+                                }
+                            }
+                            OutlinedButton(onClick = { picker.launch(arrayOf("video/*", "audio/*", "image/*")) }, modifier = Modifier.fillMaxWidth()) {
+                                Text("بث ملف من الهاتف (تجريبي)")
+                            }
+                        }
+                    }
+                }
+
+                if (resultLine.isNotBlank()) Text(resultLine, style = MaterialTheme.typography.bodySmall)
+
+                TextButton(onClick = { selected = null; renderers = emptyList(); search() }) {
+                    Text("تغيير الجهاز")
+                }
             }
         }
+    }
+}
 
-        val sel = selected
-        if (sel != null) {
-            val t = remember(sel) { DlnaTransport(sel) }
-            var shown by remember(sel) { mutableStateOf(t.level) }
-            var sliderV by remember(sel) { mutableStateOf(t.level.toFloat()) }
-            suspend fun act(res: Result<Unit>): String {
-                shown = t.level
-                sliderV = t.level.toFloat()
-                return res.msg() + " — المستوى المرسل: ${t.level}"
-            }
-            Text("المحدد: ${sel.name} (${sel.ip})", style = MaterialTheme.typography.titleMedium)
-            Text("مستوى الصوت (يتتبعه التطبيق لأن الجهاز لا يعيد قيمته الحقيقية): $shown")
-            Slider(value = sliderV, onValueChange = { sliderV = it }, valueRange = 0f..100f)
-            Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
-                run("ضبط الصوت") { act(t.setLevel(sliderV.toInt())) }
-            }) { Text("تطبيق المستوى ${sliderV.toInt()}") }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
-                    run("خفض") { act(t.send(RemoteKey.VOL_DOWN)) }
-                }) { Text("صوت −") }
-                Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
-                    run("رفع") { act(t.send(RemoteKey.VOL_UP)) }
-                }) { Text("صوت +") }
-            }
-            Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
-                run("كتم") { act(t.send(RemoteKey.MUTE)) }
-            }) { Text("كتم / إلغاء الكتم (بخفض الصوت إلى 0)") }
-            HorizontalDivider()
-            Text("تشغيل الوسائط (تعمل فقط على ما يُبث إلى الجهاز عبر DLNA، لا على قنوات الرسيفر)")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
-                    run("تشغيل") { t.avAction("Play").msg() }
-                }) { Text("تشغيل") }
-                Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
-                    run("إيقاف مؤقت") { t.avAction("Pause").msg() }
-                }) { Text("إيقاف مؤقت") }
-                Button(enabled = !busy, modifier = Modifier.weight(1f), onClick = {
-                    run("إيقاف") { t.avAction("Stop").msg() }
-                }) { Text("إيقاف") }
-            }
-            OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
-                run("حالة التشغيل") { t.transportState().fold({ it }, { "فشل: ${it.message}" }) }
-            }) { Text("قراءة حالة التشغيل (قراءة فقط)") }
+@Composable
+private fun IconButtonVol(label: String, onClick: () -> Unit) {
+    OutlinedButton(onClick = onClick, modifier = Modifier.size(48.dp), contentPadding = PaddingValues(0.dp)) {
+        Text(label, style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+/** شاشة منفصلة لأدوات الفحص والتطوير؛ لا يراها المستخدم العادي. */
+@Composable
+fun AdvancedScreen(onBack: () -> Unit) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("خيارات متقدمة") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("رجوع") } }
+            )
         }
-        log.forEach { Text(it) }
-
-        HorizontalDivider()
-        ProbeSection()
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState())) {
+            Text("هذه الأدوات للتطوير والتشخيص فقط، ولا تظهر للمستخدم العادي.", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(12.dp))
+            ProbeSection()
+        }
     }
 }
 
