@@ -186,11 +186,91 @@ fun UserScreen(onOpenAdvanced: () -> Unit) {
 
                 if (resultLine.isNotBlank()) Text(resultLine, style = MaterialTheme.typography.bodySmall)
 
+                FullRemoteLayout(
+                    enabledKeys = setOf(RemoteKey.VOL_UP, RemoteKey.VOL_DOWN, RemoteKey.MUTE),
+                    onKey = { key ->
+                        scope.launch { resultLine = t.send(key).msg(); level = t.level.toFloat() }
+                    }
+                )
+
                 TextButton(onClick = { selected = null; renderers = emptyList(); search() }) {
                     Text("تغيير الجهاز")
                 }
             }
         }
+    }
+}
+
+/**
+ * لوحة الريموت الكاملة بشكل الريموت الأصلي. الأزرار المدرجة في enabledKeys تعمل فعلاً؛
+ * كل ما عداها يظهر معطّلاً حتى يثبت بروتوكول يدعمه لهذا الموديل أو غيره.
+ */
+@Composable
+private fun FullRemoteLayout(enabledKeys: Set<RemoteKey>, onKey: (RemoteKey) -> Unit) {
+    ElevatedCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("لوحة الريموت الكاملة", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "الأزرار الملوّنة تعمل فعلاً على جهازك. الأزرار الرمادية غير مدعومة من هذا الموديل عبر Wi-Fi.",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            RKeyRow(listOf(RemoteKey.POWER to "POWER"), enabledKeys, onKey)
+            RKeyRow(listOf(RemoteKey.MENU to "MENU", RemoteKey.EXIT to "EXIT", RemoteKey.BACK to "BACK"), enabledKeys, onKey)
+
+            // كتلة الأسهم بشكل صليب
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                RKey(RemoteKey.UP, "▲", enabledKeys, onKey)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
+                RKey(RemoteKey.LEFT, "◀", enabledKeys, onKey)
+                RKey(RemoteKey.OK, "OK", enabledKeys, onKey)
+                RKey(RemoteKey.RIGHT, "▶", enabledKeys, onKey)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                RKey(RemoteKey.DOWN, "▼", enabledKeys, onKey)
+            }
+
+            RKeyRow(
+                listOf(RemoteKey.VOL_DOWN to "VOL −", RemoteKey.VOL_UP to "VOL +",
+                    RemoteKey.CH_DOWN to "CH −", RemoteKey.CH_UP to "CH +"),
+                enabledKeys, onKey
+            )
+            RKeyRow(
+                listOf(RemoteKey.MUTE to "MUTE", RemoteKey.INFO to "INFO",
+                    RemoteKey.EPG to "EPG", RemoteKey.FAV to "FAV", RemoteKey.TV_RADIO to "TV/RADIO"),
+                enabledKeys, onKey
+            )
+
+            Text("الأرقام", style = MaterialTheme.typography.bodySmall)
+            val numbers = listOf(
+                RemoteKey.NUM_1 to "1", RemoteKey.NUM_2 to "2", RemoteKey.NUM_3 to "3",
+                RemoteKey.NUM_4 to "4", RemoteKey.NUM_5 to "5", RemoteKey.NUM_6 to "6",
+                RemoteKey.NUM_7 to "7", RemoteKey.NUM_8 to "8", RemoteKey.NUM_9 to "9"
+            )
+            numbers.chunked(3).forEach { RKeyRow(it, enabledKeys, onKey) }
+            RKeyRow(listOf(RemoteKey.NUM_0 to "0"), enabledKeys, onKey)
+        }
+    }
+}
+
+@Composable
+private fun RKeyRow(items: List<Pair<RemoteKey, String>>, enabledKeys: Set<RemoteKey>, onKey: (RemoteKey) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.forEach { (key, label) ->
+            Box(Modifier.weight(1f)) { RKey(key, label, enabledKeys, onKey, fill = true) }
+        }
+    }
+}
+
+@Composable
+private fun RKey(key: RemoteKey, label: String, enabledKeys: Set<RemoteKey>, onKey: (RemoteKey) -> Unit, fill: Boolean = false) {
+    val supported = key in enabledKeys
+    val mod = if (fill) Modifier.fillMaxWidth() else Modifier
+    if (supported) {
+        Button(onClick = { onKey(key) }, modifier = mod) { Text(label) }
+    } else {
+        OutlinedButton(onClick = {}, enabled = false, modifier = mod) { Text(label) }
     }
 }
 
